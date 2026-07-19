@@ -10,6 +10,14 @@
 import os
 from dotenv import load_dotenv
 
+import sys
+import logging
+import json
+
+import re
+
+from pathlib import Path
+
 # Load environment variables from the .env file located at the project root
 # Adjust the path inside find_dotenv() if your .env is located elsewhere
 load_dotenv()
@@ -27,10 +35,9 @@ ADDONS = {}
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False
 
-# Concurrency and throttling settings
-#CONCURRENT_REQUESTS = 16
-CONCURRENT_REQUESTS_PER_DOMAIN = 1
-DOWNLOAD_DELAY = 1
+# Concurrency and throttling settings dynamically pulled from environment
+CONCURRENT_REQUESTS_PER_DOMAIN = int(os.environ.get("SCRAPY_CONCURRENCY_PER_DOMAIN", 1))
+DOWNLOAD_DELAY = int(os.environ.get("SCRAPY_DOWNLOAD_DELAY", 1))
 
 # Disable cookies (enabled by default)
 #COOKIES_ENABLED = False
@@ -44,11 +51,15 @@ DOWNLOAD_DELAY = 1
 #    "Accept-Language": "en",
 #}
 
-# Enable or disable spider middlewares
-# See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-#SPIDER_MIDDLEWARES = {
-#    "scraper.middlewares.ScraperSpiderMiddleware": 543,
-#}
+# Enable or disable downloader middlewares
+# See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
+DOWNLOADER_MIDDLEWARES = {
+    # Disable Scrapy's default UserAgent middleware to prevent conflicts
+    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
+    
+    # Enable your custom RandomHeaderMiddleware
+    'scraper.middlewares.RandomHeaderMiddleware': 400,
+}
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
@@ -93,23 +104,34 @@ ITEM_PIPELINES = {
 FEED_EXPORT_ENCODING = "utf-8"
 
 # ==============================================================================
-# STRUCTURED JSON LOGGING CONFIGURATION
 # ==============================================================================
-import sys
-import logging
-import json
 
 class JsonLogFormatter(logging.Formatter):
     def format(self, record):
-        # Create standard structured dictionary
+        message = record.getMessage()
+        structured_item = None
+        
+        # 1. Intercept Scrapy's native dictionary arguments before stringification
+        if isinstance(record.args, dict) and "item" in record.args:
+            try:
+                structured_item = dict(record.args["item"])
+                structured_item.pop("file_bytes", None)
+                message = message.splitlines()[0].strip()
+            except Exception:
+                pass
+
+        # 2. Create standard structured dictionary
         message_dict = {
             "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S") + f".{int(record.msecs):03d}Z",
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage()
+            "message": message
         }
         
-        # Explicit operational state variables
+        if structured_item:
+            message_dict["item"] = structured_item
+            
+        # 3. Explicit operational state variables
         state_fields = [
             "start_date", "end_date", "partition_len", "body_id", 
             "failed_url", "error_msg", "identifier", "run_statistics"
@@ -118,19 +140,45 @@ class JsonLogFormatter(logging.Formatter):
             if hasattr(record, field):
                 message_dict[field] = getattr(record, field)
                 
-        # Internal fields to explicitly skip (including Scrapy's spider object)
+        # 4. Internal fields to explicitly skip
         ignored_keys = {
             "args", "asctime", "created", "exc_info", "exc_text", "filename", "funcName",
             "levelname", "levelno", "lineno", "module", "msecs", "msg", "name",
             "pathname", "process", "processName", "relativeCreated", "stack_info", "thread", 
-            "threadName", "spider"  # <-- Explicitly skipping the spider instance
+            "threadName", "spider"
         }
         
-        # Capture miscellaneous context parameters passed dynamically via extra=
+        # 5. Capture miscellaneous context parameters
         for key, val in record.__dict__.items():
+            if key == "file_bytes":
+                continue
             if key not in ignored_keys and key not in message_dict:
                 message_dict[key] = val
                     
-        # Bulletproof safety mechanism: default=str forces any remaining complex 
-        # structures (like Exception objects, or Scrapy Request/Response items) to stringify
         return json.dumps(message_dict, default=str)
+
+# ==============================================================================
+# LOGGING INTEGRATION (JSON STDOUT & MONGODB)
+# ==============================================================================
+
+data_worker_path = Path(__file__).resolve().parents[2]
+if str(data_worker_path) not in sys.path:
+    sys.path.insert(0, str(data_worker_path))
+
+root_logger = logging.getLogger()
+
+# 1. Activate the JsonLogFormatter for Standard Output (Console)
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(JsonLogFormatter())
+root_logger.addHandler(console_handler)
+
+# 2. Prevent Scrapy from duplicating logs with its default text handler
+# (This tells Scrapy's engine to respect the root logger we just configured)
+LOG_FORMAT = None 
+
+try:
+    from mongo_logger import MongoHandler
+    # 3. Attach the MongoDB Handler
+    root_logger.addHandler(MongoHandler())
+except Exception as e:
+    logging.getLogger(__name__).error(f"Failed to initialize MongoHandler for Scrapy: {e}")

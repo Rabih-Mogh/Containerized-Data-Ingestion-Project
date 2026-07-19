@@ -5,10 +5,14 @@ from dagster_docker import PipesDockerClient
 
 _WORKER_ENV_KEYS = [
     "MONGO_HOST", "MONGO_PORT", "MONGO_ROOT_USER", "MONGO_ROOT_PASSWORD",
-    "MONGO_DB_NAME", "MONGO_LANDING_COLLECTION", "MONGO_TRANSFORMED_COLLECTION",
+    "MONGO_DB_NAME", "MONGO_LANDING_COLLECTION", "MONGO_TRANSFORMED_COLLECTION", "MONGO_LOGS_COLLECTION",
     "MINIO_HOST", "MINIO_API_PORT", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD",
     "MINIO_LANDING_BUCKET", "MINIO_TRANSFORMED_BUCKET",
 ]
+
+# Pull Docker configs from env
+WORKER_IMAGE_NAME = os.environ["WORKER_IMAGE_NAME"]
+WORKER_NETWORK_NAME = os.environ["WORKER_NETWORK_NAME"]
 
 def _worker_env() -> dict:
     return {k: os.environ.get(k, "") for k in _WORKER_ENV_KEYS}
@@ -25,14 +29,14 @@ class IngestionConfig(dg.Config):
 # 1. READ CONFIG FROM ENV
 # We read these at startup. To "change" them from the UI/Host, 
 # simply update your environment variables and restart the Dagster service.
-PARTITION_START_DATE = os.getenv("PARTITION_START_DATE", "2026-07-01")
-PARTITION_DAYS = int(os.getenv("PARTITION_DAYS", "30"))
+HISTORICAL_PARTITION_START_DATE = os.environ["HISTORICAL_PARTITION_START_DATE"]
+MAX_PARTITION_DAYS = int(os.environ["MAX_PARTITION_DAYS"])
 
 # 2. DEFINE DYNAMIC PARTITIONS
 # We use TimeWindowPartitionsDefinition with a custom timedelta for the "Partition Length"
 wrc_partitions_def = dg.TimeWindowPartitionsDefinition(
-    cron_schedule=f"0 0 */{PARTITION_DAYS} * *", # This approximates the interval
-    start=PARTITION_START_DATE,
+    cron_schedule=f"0 0 */{MAX_PARTITION_DAYS} * *", # This approximates the interval
+    start=HISTORICAL_PARTITION_START_DATE,
     fmt="%Y-%m-%d"
 )
 
@@ -73,15 +77,16 @@ def data_plane_ingestion(
 
     # Use the partition_key (e.g., '2026-07-01') to uniquely label this container
     safe_partition_key = context.partition_key.replace("-", "")
-    unique_run_label = f"wrc_ing_{context.run_id}_{safe_partition_key}"
+    unique_run_label = f"dataworker_ing_{context.run_id}_{safe_partition_key}"
 
     try:
         docker_pipes.run(
             context=context,
-            image="wrc_worker_image:latest",
+            image=WORKER_IMAGE_NAME,
             command=command,
             container_kwargs={
-                "network": "wrc_network",
+                "name": unique_run_label,  # <-- Added custom container name here
+                "network": WORKER_NETWORK_NAME,
                 "environment": _worker_env(),
                 "labels": {"wrc_teardown_target": unique_run_label}
             }
@@ -138,15 +143,16 @@ def data_plane_transformation(
     ]
 
     safe_partition_key = context.partition_key.replace("-", "")
-    unique_run_label = f"wrc_tfrm_{context.run_id}_{safe_partition_key}"
+    unique_run_label = f"dataworker_tfrm_{context.run_id}_{safe_partition_key}"
 
     try:
         docker_pipes.run(
             context=context,
-            image="wrc_worker_image:latest", 
+            image=WORKER_IMAGE_NAME, 
             command=command,
             container_kwargs={
-                "network": "wrc_network", 
+                "name": unique_run_label,  # <-- Added custom container name here
+                "network": WORKER_NETWORK_NAME, 
                 "environment": _worker_env(),
                 "labels": {"wrc_teardown_target": unique_run_label}
             }

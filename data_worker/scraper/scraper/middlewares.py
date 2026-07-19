@@ -4,10 +4,37 @@
 # https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
 from scrapy import signals
-
-# useful for handling different item types with a single interface
 from itemadapter import ItemAdapter
 
+import random
+
+class RandomHeaderMiddleware:
+    def __init__(self):
+        # A list of common, modern User-Agents to rotate
+        self.user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
+        ]
+        
+        # A list of Accept-Language variations
+        self.accept_languages = [
+            "en-US,en;q=0.9",
+            "en-GB,en;q=0.9,en-US;q=0.8",
+            "en-US,en;q=0.5",
+            "en;q=0.8"
+        ]
+
+    def process_request(self, request, spider):
+        # Apply a random User-Agent and Accept-Language to each request
+        request.headers['User-Agent'] = random.choice(self.user_agents)
+        request.headers['Accept-Language'] = random.choice(self.accept_languages)
+        
+        # Add a generic Accept header to mimic standard browser behavior
+        request.headers['Accept'] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
 
 class ScraperSpiderMiddleware:
     # Not all methods need to be defined. If a method is not defined,

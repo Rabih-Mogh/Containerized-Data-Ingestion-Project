@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -17,12 +18,17 @@ from scraper.items import LegalRecordItem
 class LegalRecordsSpiderSpider(scrapy.Spider):
     name = "legal_records_spider"
 
-    site      = "workplacerelations"
-    from_date = None
-    to_date   = None
-    body      = '2,1,3,15376'
+    # site      = "workplacerelations"
+    # from_date = None
+    # to_date   = None
+    # body      = '2,1,3,15376'
 
     async def start(self):  # this func is linked in middleware.py 
+
+        # Safely pull from kwargs passed via CLI (-a site=...) or fallback to env
+        self.site = getattr(self, 'site', os.environ.get("DEFAULT_SITE_KEY"))
+        self.body = getattr(self, 'body', os.environ.get("DEFAULT_TARGET_BODY_ID"))
+
         if self.site not in SITE_CONFIGS:
             raise ValueError(f"Unknown site '{self.site}'. Available: {list(SITE_CONFIGS.keys())}")
 
@@ -80,7 +86,7 @@ class LegalRecordsSpiderSpider(scrapy.Spider):
             item["site"] = self.site
             item["body_id"] = body_id
             item["identifier"] = record.xpath(sel["Id"]).get()
-            item["title"] = record.xpath(sel["Id"]).get()
+            item["title"] = record.xpath(sel["Id"]).get()                   # not found in WCR webpage; dup of "identifier"
             item["publication_date"] = record.xpath(sel["date"]).get()
             item["description"] = desc_raw.strip() if desc_raw else None
             item["reference_number"] = record.xpath(sel["refNo"]).get()
