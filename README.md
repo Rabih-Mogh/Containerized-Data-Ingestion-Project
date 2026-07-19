@@ -88,7 +88,9 @@ Create a `.env` file in the root directory of the project. The pipeline strictly
 **1. Build the Worker Image**
 The orchestration layer relies on Dagster Pipes to spin up ephemeral worker containers. You must build this image locally before launching the pipeline:
 
-    docker build -t wrc_worker_image:latest -f Dockerfile.worker . # make sure this image's name match **WORKER_IMAGE_NAME** in .env
+    docker build -t wrc_worker_image:latest -f Dockerfile.worker . 
+    
+make sure the image's name in the above command match **WORKER_IMAGE_NAME** in .env
 
 **2. Launch the Infrastructure**
 Spin up the decoupled storage, orchestration, and developer tooling:
