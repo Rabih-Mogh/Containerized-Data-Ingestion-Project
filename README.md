@@ -85,26 +85,23 @@ Create a `.env` file in the root directory of the project. The pipeline strictly
 
 ## Setup & Execution
 
-**1. Build the Worker Image**
-
+### **1. Build the Worker Image**
 The orchestration layer relies on Dagster Pipes to spin up ephemeral worker containers. You must build this image locally before launching the pipeline:
 
     docker build -t wrc_worker_image:latest -f Dockerfile.worker . 
     
 make sure the image's name in the above command match **WORKER_IMAGE_NAME** in .env
 
-**2. Launch the Infrastructure**
-
+### **2. Launch the Infrastructure**
 Spin up the decoupled storage, orchestration, and developer tooling:
 
     docker-compose up -d --build
 
-**3. Accessing Services**
-
+### **3. Accessing Services**
 * **Dagster UI**: Navigate to `http://localhost:3000`.
 * **Mongo Express**: Navigate to `http://localhost:8081` to view and manage your MongoDB collections.
 
-**4. Trigger the Orchestrator**
+### **4. Trigger the Orchestrator**
 * Navigate to `http://localhost:3000`.
 * Go to **Overview > Jobs** and select `wrc_ingestion_and_transformation_job`.
 * Click the **Materialize all** button (or edit the run's config via **Open Launchpad**), select your target Date Partition, and execute.
