@@ -1,0 +1,6 @@
+dagster==1.9.9
+dagster-webserver==1.9.9
+dagster-docker==1.9.9
+pymongo
+minio
+scrapy

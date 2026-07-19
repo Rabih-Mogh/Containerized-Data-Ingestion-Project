@@ -1,0 +1,17 @@
+FROM python:3.14.6
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/data_worker
+
+COPY data_worker/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the compute layer files
+COPY data_worker/ /opt/data_worker/
+
+# Enforce the data_worker root in the python path to resolve site_configs absolute imports
+# ENV PYTHONPATH=/opt/data_worker

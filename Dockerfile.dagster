@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/dagster/app
+
+# Corrected: Copy the actual dagster directory
+COPY dagster/ /opt/dagster/app/
+
+RUN pip install --no-cache-dir \
+    dagster \
+    dagster-webserver \
+    dagster-docker \
+    dagster-postgres \
+    pymongo \
+    minio
+
+ENV DAGSTER_HOME=/opt/dagster/dagster_home
+RUN mkdir -p $DAGSTER_HOME
+
+EXPOSE 3000
